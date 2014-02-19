@@ -1,8 +1,6 @@
 //------------------------------------------------------------------------------
-// rewritersample.cpp: Source-to-source transformation sample with Clang, using
-// Rewriter - the code rewriting interface.
-//
-// Using code from Eli Bendersky (eliben@gmail.com) as starting point
+// OpenMP to SPMD translator
+// Using code(rewritersample.cpp) from Eli Bendersky (eliben@gmail.com) as starting point
 // This code is in the public domain
 //------------------------------------------------------------------------------
 #include <cstdio>
