@@ -2,6 +2,8 @@
 //
 //                     The LLVM Compiler Infrastructure
 //
+// Code by Simone Pellegrini. Adapted to latest version of LLVM/Clang.
+//
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
