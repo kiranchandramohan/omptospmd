@@ -1,4 +1,3 @@
-#include "barrier.h"
 #include "test.h"
 #define SIZE 1024   // Size by SIZE matrices
 int a_matrix[SIZE][SIZE];
@@ -28,4 +27,8 @@ int main()
 	}
 
 	return 0 ;
+}
+
+void cleanup()
+{
 }

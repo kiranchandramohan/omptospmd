@@ -1,4 +1,3 @@
-#include "barrier.h"
 #include "test.h"
 #define N 512
 
@@ -10,14 +9,14 @@ inline int mod(int n)
 		return n ;
 }
 
-void floyd_warshall(int* path)
+void floyd_warshall(int path [__restrict__ N][N])
 {
 	int i, j, k;
 
 	#pragma omp parallel for
 	for(i=0 ; i<N ; i++) {
 		for(j=0 ; j<N ; j++) {
-			path[i*N+j] = mod(i-j) ;
+			path[i][j] = mod(i-j) ;
 		}
 	}
 
@@ -25,9 +24,24 @@ void floyd_warshall(int* path)
 		#pragma omp parallel for
 		for(i = 0; i < N; i++) {
 			for (j = 0; j < N; j++) {
-				path[i*N+j] = path[i*N+j] < path[i*N+k] + path[k*N+j] ? 
-					path[i*N+j] : path[i*N+k] + path[k*N+j] ;
+				path[i][j] = path[i][j] < path[i][k] + path[k][j] ? 
+					path[i][j] : path[i][k] + path[k][j] ;
 			}
 		}
 	}
+}
+
+int main()
+{
+	int path[N][N] ;
+	int i ;
+	for(i=0 ; i<NUM_ITER ; i++) {
+		floyd_warshall(path) ;
+	}
+
+	return 0 ;
+}
+
+void cleanup()
+{
 }

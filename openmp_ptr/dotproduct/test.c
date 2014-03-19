@@ -1,8 +1,7 @@
-#include "barrier.h"
 #include "test.h"
 #define SIZE 2048
 
-int dot_product(int* A, int* B)
+int dot_product(int* __restrict__ A, int* __restrict__ B)
 {
 	int i ;
 	int sum = 0 ;
@@ -35,4 +34,8 @@ int main()
 	}
 
 	return 0 ;
+}
+
+void cleanup()
+{
 }

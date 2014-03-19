@@ -5,7 +5,7 @@
 #define HISTO_SIZE 256
 #define PRIVATIZE_ARRAY_SIZE HISTO_SIZE
 
-void histo(int* image, int* histogram, int* gray_level_mapping)
+void histo(int* __restrict__ image, int* __restrict__ histogram, int* __restrict__ gray_level_mapping)
 {
 	int i, j ;
 	float cdf ;
@@ -50,4 +50,13 @@ void histo(int* image, int* histogram, int* gray_level_mapping)
 			image[i*IMG_SIZE+j] = gray_level_mapping[image[i*IMG_SIZE+j]];
 		}
 	}
+}
+
+int main()
+{
+	return 0 ;
+}
+
+void cleanup()
+{
 }

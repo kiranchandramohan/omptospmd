@@ -1,9 +1,8 @@
-#include "barrier.h"
 #include "test.h"
 #define MAXGRID 64
 #define LENGTH 2048
 
-void reg_detect(int* sum_tang, int* mean, int* diff, int* sum_diff, int* path, int* tmp)
+void reg_detect(int* __restrict__ sum_tang, int* __restrict__ mean, int* __restrict__ diff, int* __restrict__ sum_diff, int* __restrict__ path, int* __restrict__ tmp)
 {
         int t, i, j, cnt;
 
@@ -61,4 +60,25 @@ void reg_detect(int* sum_tang, int* mean, int* diff, int* sum_diff, int* path, i
                         x++ ;
                 }
         }
+}
+
+int main()
+{
+	int sum_tang[MAXGRID*MAXGRID] ;
+	int mean[MAXGRID*MAXGRID] ; 
+	int diff[MAXGRID*MAXGRID*LENGTH] ; 
+	int sum_diff[MAXGRID*MAXGRID*LENGTH] ;
+	int path[MAXGRID*MAXGRID] ; 
+	int tmp[MAXGRID*MAXGRID] ;
+	
+	int i ;
+	for(i=0 ; i<NUM_ITER ; i++) {
+		reg_detect(sum_tang, mean, diff, sum_diff, path, tmp) ;
+	}
+
+	return 0 ;
+}
+
+void cleanup()
+{
 }

@@ -9,10 +9,10 @@
 #define HORIZONTAL_SOBEL 3
 #define NUM_ITER 1
 
-int image_buffer1[N*N] ;
-int image_buffer2[N*N] ;
-int image_buffer3[N*N] ;
-int filter[K*K] ;
+int image_buffer1[N][N] ;
+int image_buffer2[N][N] ;
+int image_buffer3[N][N] ;
+int filter[K][K] ;
 
 int my_abs(int x)
 {
@@ -22,42 +22,42 @@ int my_abs(int x)
 		return x ;
 }
 
-void set_filter(int* __restrict__ filter, int type)
+void set_filter(int filter[__restrict__ K][K], int type)
 {
 	if(type == GAUSSIAN) {
-		filter[0*K+0] = 1;
-		filter[0*K+1] = 2;
-		filter[0*K+2] = 1;
-		filter[1*K+0] = 2;
-		filter[1*K+1] = 4;
-		filter[1*K+2] = 2;
-		filter[2*K+0] = 1;
-		filter[2*K+1] = 2;
-		filter[2*K+2] = 1;
+		filter[0][0] = 1;
+		filter[0][1] = 2;
+		filter[0][2] = 1;
+		filter[1][0] = 2;
+		filter[1][1] = 4;
+		filter[1][2] = 2;
+		filter[2][0] = 1;
+		filter[2][1] = 2;
+		filter[2][2] = 1;
 	} else if(type == VERTICAL_SOBEL) {
-		filter[0*K+0] =  1;
-		filter[0*K+1] =  0;
-		filter[0*K+2] = -1;
-		filter[1*K+0] =  2;
-		filter[1*K+1] =  0;
-		filter[1*K+2] = -2;
-		filter[2*K+0] =  1;
-		filter[2*K+1] =  0;
-		filter[2*K+2] = -1;
+		filter[0][0] =  1;
+		filter[0][1] =  0;
+		filter[0][2] = -1;
+		filter[1][0] =  2;
+		filter[1][1] =  0;
+		filter[1][2] = -2;
+		filter[2][0] =  1;
+		filter[2][1] =  0;
+		filter[2][2] = -1;
 	} else if(type == HORIZONTAL_SOBEL) {
-		filter[0*K+0] =  1;
-		filter[0*K+1] =  2;
-		filter[0*K+2] =  1;
-		filter[1*K+0] =  0;
-		filter[1*K+1] =  0;
-		filter[1*K+2] =  0;
-		filter[2*K+0] = -1;
-		filter[2*K+1] = -2;
-		filter[2*K+2] = -1;
+		filter[0][0] =  1;
+		filter[0][1] =  2;
+		filter[0][2] =  1;
+		filter[1][0] =  0;
+		filter[1][1] =  0;
+		filter[1][2] =  0;
+		filter[2][0] = -1;
+		filter[2][1] = -2;
+		filter[2][2] = -1;
 	}
 }
 
-void initialize(int* __restrict__ image_buffer1, int* __restrict__ image_buffer2, int* __restrict__ image_buffer3)
+void initialize(int image_buffer1[__restrict__ N][N], int image_buffer2[__restrict__ N][N], int image_buffer3[__restrict__ N][N])
 {
   int i, j ;
 
@@ -65,15 +65,15 @@ void initialize(int* __restrict__ image_buffer1, int* __restrict__ image_buffer2
   #pragma omp parallel for private(i,j)
   for (i = 0 ; i < N ; i++) {
     for (j = 0; j < N; j++) {
-       image_buffer1[i*N+j] = i+j ;
-       image_buffer2[i*N+j] = 0;
-       image_buffer3[i*N+j] = 0;
+       image_buffer1[i][j] = i+j ;
+       image_buffer2[i][j] = 0;
+       image_buffer3[i][j] = 0;
      }
   }
   //printf("Finishing initialization\n") ;
 }
 
-void apply_threshold(int* __restrict__ input_image1, int* __restrict__ input_image2, int* __restrict__ output_image)
+void apply_threshold(int input_image1[__restrict__ N][N], int input_image2[__restrict__ N][N], int output_image[__restrict__ N][N])
 {
   /* Take the larger of the magnitudes of the horizontal and vertical
      matrices. Form a binary image by comparing to a threshold and
@@ -84,17 +84,17 @@ void apply_threshold(int* __restrict__ input_image1, int* __restrict__ input_ima
   #pragma omp parallel for private(i,j,temp1,temp2,temp3)
   for (i = 0 ; i < N ; i++) {
     for (j = 0; j < N; j++) {
-       temp1 = my_abs(input_image1[i*N+j]);
-       temp2 = my_abs(input_image2[i*N+j]);
+       temp1 = my_abs(input_image1[i][j]);
+       temp2 = my_abs(input_image2[i][j]);
        temp3 = (temp1 > temp2) ? temp1 : temp2;
-       output_image[i*N+j] = (temp3 > T) ? 255 : 0;
+       output_image[i][j] = (temp3 > T) ? 255 : 0;
      }
   }
 }
 
 /* This function convolves the input image by the kernel and stores the result
    in the output image. */
-void convolve2d(int* input_image, int* kernel, int* output_image)
+void convolve2d(int input_image[__restrict__ N][N], int kernel[__restrict__ K][K], int output_image[__restrict__ N][N])
 {
   int i;
   int j;
@@ -120,7 +120,7 @@ void convolve2d(int* input_image, int* kernel, int* output_image)
   normal_factor = 0;
   for (r = 0; r < K; r++) {
     for (c = 0; c < K; c++) {
-      normal_factor += my_abs(kernel[r*K+c]);
+      normal_factor += my_abs(kernel[r][c]);
     }
   }
 
@@ -134,10 +134,10 @@ void convolve2d(int* input_image, int* kernel, int* output_image)
       int sum = 0;
       for (i = 0; i < K; i++) {
         for (j = 0; j < K; j++) {
-          sum += input_image[(r+i)*N+c+j] * kernel[i*K+j];
+          sum += input_image[(r+i)][c+j] * kernel[i][j];
         }
       }
-      output_image[(r+dead_rows)*N+c+dead_cols] = (sum / normal_factor);
+      output_image[(r+dead_rows)][c+dead_cols] = (sum / normal_factor);
     }
   }
 }
@@ -166,4 +166,8 @@ int main()
 	  apply_threshold(image_buffer1, image_buffer2, image_buffer3) ;
   }
   return 0 ;
+}
+
+void cleanup()
+{
 }

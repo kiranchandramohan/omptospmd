@@ -1,10 +1,9 @@
-#include "barrier.h"
 #include "test.h"
 #define NQ 64
 #define NR 64
 #define NP 64
 
-void doitgen(int* A, int* sum, int* C4)
+void doitgen(int* __restrict__ A, int* __restrict__ sum, int* __restrict__ C4)
 {
 	int r, q, p, s ; 
 
@@ -33,4 +32,22 @@ void doitgen(int* A, int* sum, int* C4)
 				A[r*NQ*NP+q*NP+p] = sum[r*NQ*NP+q*NP+p];
 		}   
 	}
+}
+
+int main()
+{
+	int A[NR*NQ*NP] ;
+	int sum[NR*NQ*NP] ;
+	int C4[NP*NP] ;
+
+	int i ;
+	for(i=0 ; i<NUM_ITER ; i++) {
+		doitgen(A, sum, C4) ;
+	}
+
+	return 0 ;
+}
+
+void cleanup()
+{
 }

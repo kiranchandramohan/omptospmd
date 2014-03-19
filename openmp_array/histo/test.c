@@ -5,9 +5,7 @@
 #define HISTO_SIZE 256
 #define PRIVATIZE_ARRAY_SIZE HISTO_SIZE
 
-int* glob_histogram[NUM_TOTAL_THREADS] ;
-
-void histo(int* image, int* histogram, int* gray_level_mapping)
+void histo(int image[__restrict__ IMG_SIZE][IMG_SIZE], int histogram[__restrict__ HISTO_SIZE], int gray_level_mapping[__restrict__ HISTO_SIZE])
 {
 	int i, j ;
 	float cdf ;
@@ -19,7 +17,7 @@ void histo(int* image, int* histogram, int* gray_level_mapping)
 	#pragma omp parallel for
 	for (i = 0 ; i < IMG_SIZE ; i++) {
 		for (j = 0; j < IMG_SIZE; ++j) {
-			image[i*IMG_SIZE+j] = (i*j) % 255 ;
+			image[i][j] = (i*j) % 255 ;
 		}   
 	}   
 
@@ -30,7 +28,7 @@ void histo(int* image, int* histogram, int* gray_level_mapping)
 	#pragma omp parallel for
 	for (i = 0; i < IMG_SIZE ; i++) {
 		for (j = 0; j < IMG_SIZE; ++j) {
-			int pix = image[i*IMG_SIZE+j] ;
+			int pix = image[i][j] ;
 			#pragma omp critical
 			histogram[pix] += 1;
 		}   
@@ -49,7 +47,25 @@ void histo(int* image, int* histogram, int* gray_level_mapping)
 	#pragma omp parallel for
 	for (i = 0 ; i < IMG_SIZE; i++) {
 		for (j = 0; j < IMG_SIZE; ++j) {
-			image[i*IMG_SIZE+j] = gray_level_mapping[image[i*IMG_SIZE+j]];
+			image[i][j] = gray_level_mapping[image[i][j]];
 		}
 	}
+}
+
+int main()
+{
+	int image[IMG_SIZE][IMG_SIZE] ;
+	int histogram[HISTO_SIZE] ;
+	int gray_level_mapping[HISTO_SIZE] ;
+
+	int i ;
+	for(i=0 ; i<NUM_ITER ; i++) {
+		histo(image, histogram, gray_level_mapping) ;
+	}
+
+	return 0 ;
+}
+
+void cleanup()
+{
 }

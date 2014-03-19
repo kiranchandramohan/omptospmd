@@ -1,4 +1,3 @@
-#include "barrier.h"
 #include "test.h"
 #define N 512
 
@@ -10,7 +9,7 @@ inline int mod(int n)
 		return n ;
 }
 
-void floyd_warshall(int* path)
+void floyd_warshall(int* __restrict__ path)
 {
 	int i, j, k;
 
@@ -30,4 +29,19 @@ void floyd_warshall(int* path)
 			}
 		}
 	}
+}
+
+int main()
+{
+	int path[N*N] ;
+	int i ;
+	for(i=0 ; i<NUM_ITER ; i++) {
+		floyd_warshall(path) ;
+	}
+
+	return 0 ;
+}
+
+void cleanup()
+{
 }
