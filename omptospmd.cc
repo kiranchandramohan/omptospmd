@@ -50,12 +50,22 @@ void MyASTVisitor::printBufferProperties()
 		SSAfter<<"\n\t\tbufs[i].nbo = 1 ;" ;
 		SSAfter<<"\n\t\tbufs[i].remote_attach = true ;" ;
 		if(buffers.size() > 0) {
-			if(buffers[0].dim1>4096 && buffers[0].dim2==1) {
-				buffers[0].dim2 = buffers[0].dim1 = static_cast<int>(sqrt(static_cast<double>(buffers[0].dim1))) ;
+			for(int i=0 ; i<buffers.size() ; i++) {
+				if(buffers[i].dim1>4096 && buffers[i].dim2==1) {
+					buffers[i].dim2 = buffers[i].dim1 = static_cast<int>(sqrt(static_cast<double>(buffers[0].dim1))) ;
+				}
+				if(buffers[i].dim3>1) {
+					buffers[i].dim2 *= buffers[i].dim3 ;
+				}
+				SSAfter<<"\n\t\tif(i=="<<i<<") {";
+				SSAfter<<"\n\t\t\tbufs[i].width = "<<buffers[i].dim1<<" ;" ;
+				SSAfter<<"\n\t\t\tbufs[i].height = "<<buffers[i].dim2<<" ;" ;
+				SSAfter<<"\n\t\t}";
 			}
+		} else {
+			SSAfter<<"\n\t\tbufs[i].width = 32 ;" ;
+			SSAfter<<"\n\t\tbufs[i].height = 32 ;" ;
 		}
-		SSAfter<<"\n\t\tbufs[i].width = "<<((buffers.size()>0)?buffers[0].dim1:1)<<" ;" ;
-		SSAfter<<"\n\t\tbufs[i].height = "<<((buffers.size()>0)?buffers[0].dim2:1)<<" ;" ;
 		SSAfter<<"\n\t}" ;
 		SSAfter<<"\n}" ;
 		SourceLocation ST = MinSL.getLocWithOffset(-1);
@@ -63,7 +73,7 @@ void MyASTVisitor::printBufferProperties()
 	}
 }
 
-void MyASTVisitor::getDimensions(VarDecl* v, BufferInfo& bi)
+void MyASTVisitor::getBufferInfo(VarDecl* v, BufferInfo& bi)
 {
 	bi.arrayName = v->getNameAsString() ;
 	bi.dim1 = bi.dim2 = bi.dim3 = 1 ;
@@ -83,10 +93,8 @@ void MyASTVisitor::getDimensions(VarDecl* v, BufferInfo& bi)
 			if(T3 && T3->isConstantArrayType()) {
 				const ConstantArrayType* cat3 = dyn_cast<ConstantArrayType>(T3) ;
 				bi.dim3 = cat3->getSize().getSExtValue() ;
-				T4 = T3->getBaseElementTypeUnsafe();
-			} else {
-				T4 = T3->getBaseElementTypeUnsafe();
 			}
+			T4 = T3->getBaseElementTypeUnsafe();
 			if(T4->isBuiltinType()) {
 				bi.base_type_str = dyn_cast<BuiltinType>(T4)->getName(AC.getPrintingPolicy()) ;
 			}
@@ -120,7 +128,7 @@ std::string MyASTVisitor::getType(VarDecl* v, bool withName)
 	std::string base_type_str ;
 	std::string qualifier_str ;
 	BufferInfo bi ;
-	getDimensions(v,bi) ;
+	getBufferInfo(v,bi) ;
 	SSAfter<<bi.base_type_str ;
 	std::string varName ;
 	if(withName) {
@@ -459,9 +467,12 @@ void MyASTVisitor::HandleCriticalDirective(Stmt* s)
 	CapturedStmt* CS = NULL ;
 	if (CS = dyn_cast_or_null<CapturedStmt>(Body))
 		Body = CS->getCapturedStmt();
-	SourceLocation ST1 = CS->getLocEnd().getLocWithOffset(1) ;
+	SourceLocation ST1 = Body->getLocEnd().getLocWithOffset(1) ;
 	TheRewriter.InsertText(ST1, prvStream.str(), true, true);
-	renameMap[critical_var_name] = new_name ;
+	varInfo vi ;
+	vi.newName = new_name ;
+	vi.scope = curFunctionDecl ;
+	renameMap[critical_var_name] = vi ;
 }
 
 void MyASTVisitor::GetCriticalDirectiveInfo(Stmt* s, bool& is_array, std::string& critical_var_name, std::string& type_str, BinaryOperatorKind& bok)
@@ -595,10 +606,10 @@ bool MyASTVisitor::VisitStmt(Stmt *s)
 		if(renameIgnore.find(s->getLocStart().getRawEncoding()) == renameIgnore.end()) {
 			//printf("Renaming DeclRefExpr %u %s\n", s->getLocStart().getRawEncoding(), static_cast<const DeclRefExpr*>(s)->getDecl()->getName().str().c_str()) ;
 			std::string curName = static_cast<const DeclRefExpr*>(s)->getDecl()->getName() ;
-			std::map<std::string,std::string>::iterator it = renameMap.find(curName) ;
-			if(it != renameMap.end()) {
+			std::map<std::string,varInfo>::iterator it = renameMap.find(curName) ;
+			if((it != renameMap.end()) && ((*it).second.scope == curFunctionDecl)) {
 				SourceRange sr(s->getLocStart(), s->getLocEnd()) ;
-				TheRewriter.ReplaceText(sr, (*it).second.c_str()) ;
+				TheRewriter.ReplaceText(sr, (*it).second.newName.c_str()) ;
 			}
 		} else {
 			//printf("Ignoring DeclRefExpr %u %s\n", reinterpret_cast<unsigned int>(s), static_cast<const DeclRefExpr*>(s)->getDecl()->getName().str().c_str()) ;
@@ -691,7 +702,7 @@ bool MyASTVisitor::VisitVarDecl(VarDecl* v)
 				std::string dummy_base_type_str ;
 				std::string dummy_qualifier_str ;
 				bi.id = buffers.size() ;
-				getDimensions(v,bi) ;
+				getBufferInfo(v,bi) ;
 				nameToBufferId[bi.arrayName] = bi.id ;
 				buffers.push_back(bi) ;
 

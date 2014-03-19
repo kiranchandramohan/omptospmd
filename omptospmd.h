@@ -58,6 +58,12 @@ struct BarrierInfo
 	bool printBarrier ;
 } ;
 
+struct varInfo
+{
+	std::string newName ;
+	FunctionDecl* scope ; //KCFIX : Should actually be Scope
+} ;
+
 // By implementing RecursiveASTVisitor, we can specify which AST nodes
 // we're interested in by overriding relevant methods.
 class MyASTVisitor : public RecursiveASTVisitor<MyASTVisitor> {
@@ -75,7 +81,7 @@ private:
   SourceLocation MinSL ;
   std::vector<BufferInfo> buffers ;
   std::map<std::string, int> nameToBufferId ;
-  std::map<std::string, std::string> renameMap ;
+  std::map<std::string, varInfo> renameMap ;
   std::set<VarDecl*> globalMem ;
   std::set<Stmt*> barrierPresentAtScope ;
   std::vector<Stmt*> StmtStack ;
@@ -98,7 +104,7 @@ private:
   void handleReduction(Stmt* s) ;
   void HandleCriticalDirective(Stmt* s) ;
   void GetCriticalDirectiveInfo(Stmt* s, bool& is_array, std::string& critical_var_name, std::string& type_str, BinaryOperatorKind& bok) ;
-  void getDimensions(VarDecl* v, BufferInfo& bi) ;
+  void getBufferInfo(VarDecl* v, BufferInfo& bi) ;
   void printVarAsString(VarDecl* v, std::stringstream& SSAfter) ;
   void printBufferProperties() ;
   std::string getBarrierStr() ;
