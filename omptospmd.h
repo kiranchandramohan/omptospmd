@@ -40,6 +40,24 @@ enum PType
 
 using namespace clang;
 
+struct BufferInfo
+{
+	int id ;
+	int dim1 ;
+	int dim2 ;
+	int dim3 ;
+	std::string arrayName ;
+	std::string base_type_str ;
+	std::string qualifier_str ;
+} ;
+
+struct BarrierInfo
+{
+	SourceLocation SL ;
+	bool printFlush ;
+	bool printBarrier ;
+} ;
+
 // By implementing RecursiveASTVisitor, we can specify which AST nodes
 // we're interested in by overriding relevant methods.
 class MyASTVisitor : public RecursiveASTVisitor<MyASTVisitor> {
@@ -52,7 +70,11 @@ private:
   bool new_scope ;
   bool inMain ;
   FunctionDecl* curFunctionDecl ;
+  FunctionDecl* mainFunctionDecl ;
   Stmt* curOmpFor ;
+  SourceLocation MinSL ;
+  std::vector<BufferInfo> buffers ;
+  std::map<std::string, int> nameToBufferId ;
   std::map<std::string, std::string> renameMap ;
   std::set<VarDecl*> globalMem ;
   std::set<Stmt*> barrierPresentAtScope ;
@@ -60,6 +82,7 @@ private:
   std::set<Stmt*> stmt_seen ;
   std::set<unsigned int> renameIgnore ;
   std::set<unsigned int> ompFunction ;
+  std::vector<BarrierInfo> barrierInformation ;
 
   void removePragma(Stmt* s) ;
 
@@ -75,13 +98,17 @@ private:
   void handleReduction(Stmt* s) ;
   void HandleCriticalDirective(Stmt* s) ;
   void GetCriticalDirectiveInfo(Stmt* s, bool& is_array, std::string& critical_var_name, std::string& type_str, BinaryOperatorKind& bok) ;
-  void getDimensions(VarDecl* v, int& dim1, int& dim2, std::string& base_type_str, std::string& qualifier_str) ;
+  void getDimensions(VarDecl* v, BufferInfo& bi) ;
   void printVarAsString(VarDecl* v, std::stringstream& SSAfter) ;
+  void printBufferProperties() ;
+  std::string getBarrierStr() ;
+  void printFlushesAndBarriers() ;
+  std::string getType(VarDecl* v, bool withName) ;
 
 public:
-  MyASTVisitor(Rewriter &R, ASTContext& actxt, PType p) : TheRewriter(R), AC(actxt), PT(p), reduction_counter(0), barrier_counter(0), 
-  						new_scope(false), inMain(false), curFunctionDecl(NULL), curOmpFor(NULL), renameMap(), 
-						globalMem(), barrierPresentAtScope(), StmtStack(), stmt_seen(), renameIgnore(), ompFunction() { }
+  MyASTVisitor(Rewriter &R, ASTContext& actxt, PType p) : TheRewriter(R), AC(actxt), PT(p), reduction_counter(0), barrier_counter(0), new_scope(false), inMain(false), 
+  						curFunctionDecl(NULL), mainFunctionDecl(NULL), curOmpFor(NULL), MinSL(), buffers(), nameToBufferId(), renameMap(), 
+						globalMem(), barrierPresentAtScope(), StmtStack(), stmt_seen(), renameIgnore(), ompFunction(), barrierInformation() { }
   bool TraverseStmt(Stmt *Statement) ;
   bool VisitStmt(Stmt *s) ; 
   bool VisitFunctionDecl(FunctionDecl *f) ;

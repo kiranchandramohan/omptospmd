@@ -10,6 +10,7 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <cmath>
 
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
@@ -35,58 +36,111 @@
 
 using namespace clang;
 
-void MyASTVisitor::getDimensions(VarDecl* v, int& dim1, int& dim2, std::string& base_type_str, std::string& qualifier_str)
+void MyASTVisitor::printBufferProperties()
 {
-	dim1 = dim2 = 1 ;
+	if(PT == A9) {
+		std::stringstream SSAfter ;
+		SSAfter<<"void set_buffer_properties(struct buffer* bufs, int nbuf)" ;
+		SSAfter<<"\n{" ;
+		SSAfter<<"\n\tint i ;" ;
+		SSAfter<<"\n\tfor(i=0 ; i<nbuf ; i++) {" ;
+		SSAfter<<"\n\t\tbufs[i].cache_type = OMAP_BO_CACHED ;" ;
+		SSAfter<<"\n\t\tbufs[i].privatize = false ;" ;
+		SSAfter<<"\n\t\tbufs[i].rd_only = false ;" ;
+		SSAfter<<"\n\t\tbufs[i].nbo = 1 ;" ;
+		SSAfter<<"\n\t\tbufs[i].remote_attach = true ;" ;
+		if(buffers.size() > 0) {
+			if(buffers[0].dim1>4096 && buffers[0].dim2==1) {
+				buffers[0].dim2 = buffers[0].dim1 = static_cast<int>(sqrt(static_cast<double>(buffers[0].dim1))) ;
+			}
+		}
+		SSAfter<<"\n\t\tbufs[i].width = "<<((buffers.size()>0)?buffers[0].dim1:1)<<" ;" ;
+		SSAfter<<"\n\t\tbufs[i].height = "<<((buffers.size()>0)?buffers[0].dim2:1)<<" ;" ;
+		SSAfter<<"\n\t}" ;
+		SSAfter<<"\n}" ;
+		SourceLocation ST = MinSL.getLocWithOffset(-1);
+		TheRewriter.InsertText(ST, SSAfter.str(), true, true);
+	}
+}
+
+void MyASTVisitor::getDimensions(VarDecl* v, BufferInfo& bi)
+{
+	bi.arrayName = v->getNameAsString() ;
+	bi.dim1 = bi.dim2 = bi.dim3 = 1 ;
 	QualType QT1 = v->getTypeSourceInfo() ? v->getTypeSourceInfo()->getType() : v->getType() ;
 	const Type* T1 = QT1.getTypePtr() ;
 	if(T1->isConstantArrayType()) {
 		const ConstantArrayType* cat1 = dyn_cast<ConstantArrayType>(T1) ; 
-		dim1 = cat1->getSize().getSExtValue() ;
+		bi.dim1 = cat1->getSize().getSExtValue() ;
 		QualType QT2 = cat1->getElementType() ;
 		const Type* T2 = QT2.getTypePtr() ;
 		if(T2 && T2->isConstantArrayType()) {
 			const ConstantArrayType* cat2 = dyn_cast<ConstantArrayType>(T2) ;
-			dim2 = cat2->getSize().getSExtValue() ;
-			const Type* T3 = T2->getBaseElementTypeUnsafe();
-			if(T3->isBuiltinType()) {
-				base_type_str = dyn_cast<BuiltinType>(T3)->getName(AC.getPrintingPolicy()) ;
+			bi.dim2 = cat2->getSize().getSExtValue() ;
+			QualType QT3 = cat2->getElementType() ;
+			const Type* T3 = QT3.getTypePtr() ;
+			const Type* T4 ;
+			if(T3 && T3->isConstantArrayType()) {
+				const ConstantArrayType* cat3 = dyn_cast<ConstantArrayType>(T3) ;
+				bi.dim3 = cat3->getSize().getSExtValue() ;
+				T4 = T3->getBaseElementTypeUnsafe();
+			} else {
+				T4 = T3->getBaseElementTypeUnsafe();
+			}
+			if(T4->isBuiltinType()) {
+				bi.base_type_str = dyn_cast<BuiltinType>(T4)->getName(AC.getPrintingPolicy()) ;
 			}
 		} else {
 			const Type* T3 = T1->getBaseElementTypeUnsafe();
 			if(T3->isBuiltinType()) {
-				base_type_str = dyn_cast<BuiltinType>(T3)->getName(AC.getPrintingPolicy()) ;
+				bi.base_type_str = dyn_cast<BuiltinType>(T3)->getName(AC.getPrintingPolicy()) ;
 			}
 		}
 	} else if(T1->isPointerType()) {
 		const Type* T3 = T1->getPointeeType().getTypePtr() ;
 		if(T3->isBuiltinType()) {
-			base_type_str = dyn_cast<BuiltinType>(T3)->getName(AC.getPrintingPolicy()) ;
+			bi.base_type_str = dyn_cast<BuiltinType>(T3)->getName(AC.getPrintingPolicy()) ;
 		}
 	}
 
 	if(v->getType().isRestrictQualified()) {
 		if(PT == A9) {
-			qualifier_str = "__restrict__" ;
+			bi.qualifier_str = "__restrict__" ;
 		} else {//M3, DSP
-			qualifier_str = "restrict" ;
+			bi.qualifier_str = "restrict" ;
 		}
 	}
 }
 
-void MyASTVisitor::printVarAsString(VarDecl* v, std::stringstream& SSAfter)
+std::string MyASTVisitor::getType(VarDecl* v, bool withName)
 {
+	std::stringstream SSAfter ;
 	int dim1 ;
 	int dim2 ;
 	std::string base_type_str ;
 	std::string qualifier_str ;
-	getDimensions(v,dim1,dim2,base_type_str,qualifier_str) ;
-	SSAfter<<base_type_str ;
-	if((dim1 > 1) && (dim2 > 1)) {
-		SSAfter<<"(*"<<qualifier_str<<" "<<v->getNameAsString().c_str()<<")["<<dim2<<"]" ;
+	BufferInfo bi ;
+	getDimensions(v,bi) ;
+	SSAfter<<bi.base_type_str ;
+	std::string varName ;
+	if(withName) {
+		varName = bi.arrayName ;
 	} else {
-		SSAfter<<"*"<<qualifier_str<<" "<<v->getNameAsString().c_str() ;
+		varName = "" ;
 	}
+	if(bi.dim2 > 1)
+		SSAfter<<"(" ;
+	SSAfter<<"*"<<bi.qualifier_str<<" "<<varName ;
+	if(bi.dim2 > 1)
+		SSAfter<<")["<<bi.dim2<<"]" ;
+	if(bi.dim3 > 1)
+		SSAfter<<"["<<bi.dim3<<"]" ;
+	return SSAfter.str() ;
+}
+
+void MyASTVisitor::printVarAsString(VarDecl* v, std::stringstream& SSAfter)
+{
+	SSAfter<<getType(v, true) ;
 }
 			
 
@@ -141,11 +195,61 @@ void MyASTVisitor::insertStartEndIndxInFor(Stmt* s)
 	}
 }
 
+std::string MyASTVisitor::getBarrierStr()
+{
+	std::stringstream barrierStream ;
+	if(PT == A9) {
+		barrierStream<<"\nif(tid == 0) {" ;
+		barrierStream<<"\n\tcall_barrier("<<barrier_counter<<") ;" ;
+		barrierStream<<"\n}" ;
+		barrierStream<<"\npthread_barrier_wait(&barrier"<<barrier_counter<<") ;" ;
+	} else if(PT == M3) {
+		barrierStream<<"\nif(tid == 0) {" ;
+		barrierStream<<"\n\tcallBarrier("<<barrier_counter<<", /*lock_id=*/4) ;" ;
+		barrierStream<<"\n}" ;
+		barrierStream<<"\ncallLocalBarrier() ;" ;
+	} else if(PT == DSP) {
+		barrierStream<<"\n\tcallBarrier("<<barrier_counter<<", /*lock_id=*/4) ;" ;
+	} else {
+	}
+	barrier_counter++ ;
+
+	return barrierStream.str() ;
+}
+
+void MyASTVisitor::printFlushesAndBarriers()
+{
+	for (std::vector<BarrierInfo>::iterator it = barrierInformation.begin() ; it != barrierInformation.end(); it++)
+	{
+		std::stringstream flushStream ;
+		if((*it).printFlush) {
+			if(PT == A9) {
+				flushStream<<"\nif(tid == 0) {" ;
+				flushStream<<"\n\tif(remote_fd.sysm3 >= 0) {" ;
+				for(int i=0 ; i<buffers.size() ; i++) {
+					flushStream<<"\n\t\tdetach_buffer(buffers["<<i<<"], remote_fd.sysm3, 0) ;" ;
+					flushStream<<"\n\t\tattach_buffer(buffers["<<i<<"], remote_fd.sysm3, 0) ;" ;
+				}
+				flushStream<<"\n\t}" ;
+				flushStream<<"\n\tif(remote_fd.dsp >= 0) {" ;
+				for(int i=0 ; i<buffers.size() ; i++) {
+					flushStream<<"\n\t\tdetach_buffer(buffers["<<i<<"], remote_fd.dsp, 0) ;" ;
+					flushStream<<"\n\t\tattach_buffer(buffers["<<i<<"], remote_fd.dsp, 0) ;" ;
+				}
+				flushStream<<"\n\t}" ;
+				flushStream<<"\n}\n" ;
+			}
+		}
+		if((*it).printBarrier)
+			flushStream<<getBarrierStr()<<"\n" ;
+		TheRewriter.InsertText((*it).SL, flushStream.str(),true,true) ;
+	}
+}
+
 //KCFIX : This is very dumb
 void MyASTVisitor::insertBarrier(Stmt* s)
 {
 	std::stringstream barrierStream1 ;
-	SourceLocation ST ;
 	Stmt *Body = static_cast<OMPForDirective*>(s)->getAssociatedStmt();
 	CapturedStmt* CS = NULL ;
 	if (CS = dyn_cast_or_null<CapturedStmt>(Body))
@@ -154,14 +258,20 @@ void MyASTVisitor::insertBarrier(Stmt* s)
 		Stmt* scope_stmt = StmtStack[StmtStack.size()-4] ;
 		//printf("Scope = %p\n", static_cast<void *>(scope_stmt)) ;
 		if(barrierPresentAtScope.find(scope_stmt) == barrierPresentAtScope.end()) {
-			ST = Body->getLocStart() ; //.getLocWithOffset(-1) ;
-			barrierStream1<<"call_barrier("<<(barrier_counter++)<<") ;\n" ;
-			TheRewriter.InsertText(ST, barrierStream1.str(),false,true);
+			BarrierInfo BI ;
+			BI.printBarrier = BI.printFlush = true ;
+			BI.SL = Body->getLocStart() ; //.getLocWithOffset(-1) ;
+			//barrierStream1<<getBarrierStr()<<"\n" ;
+			TheRewriter.InsertText(BI.SL, barrierStream1.str(),false,true);
+			barrierInformation.push_back(BI) ;
 		}
-		ST = CS->getLocEnd().getLocWithOffset(1) ; //KCFIX : Why offset of 3 ?
+		BarrierInfo BI ;
+		BI.printBarrier = BI.printFlush = true ;
+		BI.SL = CS->getLocEnd().getLocWithOffset(1) ; //KCFIX : Why offset of 3 ?
 		std::stringstream barrierStream2 ;
-		barrierStream2<<"\ncall_barrier("<<(barrier_counter++)<<") ;\n" ;
-		TheRewriter.InsertText(ST, barrierStream2.str(),true,true) ;
+		//barrierStream2<<getBarrierStr() ;
+		barrierInformation.push_back(BI) ;
+		TheRewriter.InsertText(BI.SL, barrierStream2.str(),true,true) ;
 		barrierPresentAtScope.insert(scope_stmt) ;
 		new_scope = false ;
 	}
@@ -208,7 +318,13 @@ void MyASTVisitor::insertStartEndIndxInFn(FunctionDecl *f)
 				//	SSAfter2<<"(*"<<(*got)->getNameAsString().c_str()<<")["<<dim2<<"]" ;
 			
 			}
-			SSAfter << "int start_indx, int end_indx)" ;
+			if(PT == A9) {
+				SSAfter << "struct buffer* __restrict__ buffers, int tid, int start_indx, int end_indx)" ;
+			} else if(PT == M3) {
+				SSAfter << "int tid, int start_indx, int end_indx)" ;
+			} else if(PT == M3 || PT == DSP) {
+				SSAfter << "int start_indx, int end_indx)" ;
+			}
 			//SourceLocation ST = f->getLocStart().getLocWithOffset(prototype.length()) ;
 			SourceRange SR(f->getLocStart(), s->getLocStart().getLocWithOffset(-1)) ;
 			TheRewriter.ReplaceText(SR, SSAfter.str()) ;
@@ -415,6 +531,25 @@ bool MyASTVisitor::VisitStmt(Stmt *s)
 		std::set<Stmt*>::iterator it = barrierPresentAtScope.find(scope_stmt) ;
 		if(it != barrierPresentAtScope.end())
 			barrierPresentAtScope.erase(it);
+
+		if(inMain) {
+			Stmt* sb = (dyn_cast<ForStmt>(s))->getBody() ;
+			BarrierInfo BI ;
+			BI.printFlush = false ;
+			BI.printBarrier = true ;
+			BI.SL = sb->getLocStart().getLocWithOffset(1) ;
+			barrierInformation.push_back(BI) ;
+			if(PT == M3) {
+				std::stringstream SSAfter ;
+				SourceLocation SL = sb->getLocEnd().getLocWithOffset(2) ;
+				SSAfter<<"\n\tif(tid == 0) {" ;
+				SSAfter<<"\n\t\tEvent_post(edgeDetectEvent, Event_Id_00) ;" ;
+				SSAfter<<"\n\t} else {" ;
+				SSAfter<<"\n\t\tEvent_post(edgeDetectEvent, Event_Id_01) ;" ;
+				SSAfter<<"\n\t}" ;
+				TheRewriter.InsertText(SL, SSAfter.str(), true, true);
+			}
+		}
 	}
 
 	if(isa<OMPCriticalDirective>(s)) {
@@ -444,7 +579,13 @@ bool MyASTVisitor::VisitStmt(Stmt *s)
 					}
 				}
 			}
-			SSAfter << "start_indx, end_indx)" ;
+			if(PT == A9) {
+				SSAfter << "buffers, tid, start_indx, end_indx)" ;
+			} else if(PT == M3) {
+				SSAfter << "tid, t->start_indx, t->end_indx)" ;
+			} else if(PT == DSP) {
+				SSAfter << "args->start_indx, args->end_indx)" ;
+			}
 			SourceRange SR(s->getLocStart(), s->getLocEnd()) ;
 			TheRewriter.ReplaceText(SR, SSAfter.str()) ;
 		}
@@ -478,55 +619,89 @@ bool MyASTVisitor::VisitFunctionDecl(FunctionDecl *f)
 {
 	// Only function definitions (with bodies), not declarations.
 	if (f->hasBody()) {
+		if(MinSL.isValid()) {
+			MinSL = MinSL < f->getLocStart() ? MinSL : f->getLocStart() ;
+		} else {
+			MinSL = f->getLocStart() ;
+		}
 		curFunctionDecl = f ;
 		insertStartEndIndxInFn(f) ;
 
-		std::string FStr = f->getNameInfo().getAsString() ;
-		if(FStr == std::string("main")) {
-			//printf("Function Decl = %s\n", FStr.c_str()) ;
-			Stmt* s = f->getBody() ;
-			SourceRange SR(f->getLocStart(), s->getLocStart().getLocWithOffset(-1)) ;
-			std::stringstream SSAfter1 ;
-			SSAfter1<<"int a9_compute(int tid, struct buffer* buffers, int start_indx, int end_indx)" ;
-			TheRewriter.ReplaceText(SR, SSAfter1.str()) ;
-
-			SourceLocation SL = s->getLocStart().getLocWithOffset(1) ;
-			std::stringstream SSAfter2 ;
-			std::set<VarDecl*>::const_iterator got ;
-			int i ;
-			for(i=0,got=globalMem.begin() ; got!= globalMem.end() ; got++,i++) {
-				SSAfter2<<"\n\t" ;
-				printVarAsString((*got), SSAfter2) ;
-				SSAfter2<<"= buffers["<<i<<"].bo[0]->map ;" ;
-			}
-			//SSAfter2<<"\n\tint i;\n\tfor(i=0 ; i<NUM_ITER ; i++)\n\t{\n" ;
-			TheRewriter.InsertText(SL, SSAfter2.str(), true, true);
-			inMain = true ;
+		inMain = f->isMain() ;
+		if(inMain) {
+			mainFunctionDecl = f ;
 		} else {
-			inMain = false ;
-		}
+			std::string FStr = f->getNameInfo().getAsString() ;
+			if(FStr == std::string("cleanup")) {
+				Stmt* s = mainFunctionDecl->getBody() ;
+				SourceRange SR(mainFunctionDecl->getLocStart(), s->getLocStart().getLocWithOffset(-1)) ;
+				std::stringstream SSAfter1 ;
+				if(PT == A9) {
+					SSAfter1<<"\nint a9_compute(int tid, struct buffer* buffers, int start_indx, int end_indx)" ;
+				} else if(PT == M3) {
+					SSAfter1<<"\nint common_wrapper(UArg arg0, UArg arg1)" ;
 
-	} 
+				} else if(PT == DSP) {
+					SSAfter1<<"\nint common_wrapper(FxnArgs* args)" ;
+				}
+				TheRewriter.ReplaceText(SR, SSAfter1.str()) ;
+
+				SourceLocation SL = s->getLocStart().getLocWithOffset(1) ;
+				std::stringstream SSAfter2 ;
+				if(PT == M3) {
+					SSAfter2<<"\n\ttaskArgs* t = (taskArgs*)arg0 ;" ;
+					SSAfter2<<"\n\tint tid = (int)arg1 ;" ;
+				}
+				std::set<VarDecl*>::const_iterator got ;
+				int i ;
+				for(i=0,got=globalMem.begin() ; got!= globalMem.end() ; got++,i++) {
+					SSAfter2<<"\n\t" ;
+					printVarAsString((*got), SSAfter2) ;
+					if(PT == A9) {
+						SSAfter2<<"= ("<<getType((*got),false)<<")buffers["<<i<<"].bo[0]->map ;" ;
+					} else if(PT == M3) {
+						SSAfter2<<"= ("<<getType((*got),false)<<")t->buffer"<<(i+1)<<" ;" ;
+					} else if(PT == DSP) {
+						char arg = 'a' + i ;
+						SSAfter2<<"= ("<<getType((*got),false)<<")args->"<<arg<<" ;" ;
+					}
+				}
+				TheRewriter.InsertText(SL, SSAfter2.str(), true, true);
+
+				printBufferProperties() ;
+				printFlushesAndBarriers() ;
+			}
+		}
+	}
+
 	return true;
 }
 
 bool MyASTVisitor::VisitVarDecl(VarDecl* v)
 {
-	if(v->hasGlobalStorage()) {
-	      QualType QT1 = v->getType() ;
-	      const Type* T1 = QT1.getTypePtr() ;
-	      if(T1->isConstantArrayType()) {
-		      std::set<VarDecl*>::const_iterator got = globalMem.find(v) ;
-		      if(got == globalMem.end()) {
-			      globalMem.insert(v) ;
-			      SourceLocation ss = v->getLocStart() ;
-			      SourceLocation se = v->getLocEnd().getLocWithOffset(2) ;
-			      SourceRange SR(ss, se) ;
-			      TheRewriter.RemoveText(SR) ;
-		      }
-	      }
-	}
+	if(v->hasGlobalStorage() || inMain) {
+		QualType QT1 = v->getType() ;
+		const Type* T1 = QT1.getTypePtr() ;
+		if(T1->isConstantArrayType()) {
+			std::set<VarDecl*>::const_iterator got = globalMem.find(v) ;
+			if(got == globalMem.end()) {
+				globalMem.insert(v) ;
 
+				BufferInfo bi ;
+				std::string dummy_base_type_str ;
+				std::string dummy_qualifier_str ;
+				bi.id = buffers.size() ;
+				getDimensions(v,bi) ;
+				nameToBufferId[bi.arrayName] = bi.id ;
+				buffers.push_back(bi) ;
+
+				SourceLocation ss = v->getLocStart() ;
+				SourceLocation se = v->getLocEnd().getLocWithOffset(2) ;
+				SourceRange SR(ss, se) ;
+				TheRewriter.RemoveText(SR) ;
+			}
+		}
+	}
 
 	return true ;
 }
