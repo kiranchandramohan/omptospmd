@@ -75,12 +75,12 @@ hist:
 	-./omptospmd openmp_array/histo/test.c && gcc -c output/test_a9.c && clang -c output/test_a9.c
 
 mxm:
-	-./omptospmd openmp_ptr/matmul/test.c && gcc -c output/test_a9.c && clang -c output/test_a9.c
-	-./omptospmd openmp_array/matmul/test.c && gcc -c output/test_a9.c && clang -c output/test_a9.c
+	-./omptospmd openmp_ptr/matmul/test.c && gcc -c output/test_a9.c && clang -c output/test_a9.c && clang -c output/test_m3.c && clang -c output/test_dsp.c
+	-./omptospmd openmp_array/matmul/test.c && gcc -c output/test_a9.c && clang -c output/test_a9.c && clang -c output/test_m3.c && clang -c output/test_dsp.c
 
 regd:
-	-./omptospmd openmp_ptr/regdetect/test.c && gcc -c output/test_a9.c && clang -c test_ptr/regdetect.c
-	-./omptospmd openmp_array/regdetect/test.c && gcc -c output/test_a9.c && clang -c test_array/regdetect.c
+	-./omptospmd openmp_ptr/regdetect/test.c && gcc -c output/test_a9.c && clang -c output/test_a9.c
+	-./omptospmd openmp_array/regdetect/test.c && gcc -c output/test_a9.c && clang -c output/test_a9.c
 
 clean:
 	rm -rf *.o *.ll omptospmd
